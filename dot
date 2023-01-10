@@ -1,0 +1,434 @@
+local Library = loadstring(game:HttpGet('https://raw.githubusercontent.com/Rain-Design/PPHUD/main/Library.lua'))()
+local Flags = Library.Flags
+local GameName = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name
+
+local NotificationHolder = loadstring(game:HttpGet("https://raw.githubusercontent.com/BocusLuke/UI/main/STX/Module.Lua"))()
+local Notification = loadstring(game:HttpGet("https://raw.githubusercontent.com/BocusLuke/UI/main/STX/Client.Lua"))()
+
+local Camera = workspace.CurrentCamera
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local RenderStepped = RunService.RenderStepped
+
+local LocalPlayer = Players.LocalPlayer
+local chr = LocalPlayer.Character
+local hum = chr:WaitForChild("Humanoid")
+
+local game = game;
+local GetService = game.GetService;
+
+local RunService = game:GetService("RunService")
+local RenderStepped = RunService.RenderStepped
+
+local Workspace = GetService(game, "Workspace");
+local Players = GetService(game, "Players");
+local ReplicatedStorage = GetService(game, "ReplicatedStorage");
+local StarterGui = GetService(game, "StarterGui");
+
+local resume = coroutine.resume 
+local create = coroutine.create
+
+local LogService = GetService(game, "LogService");
+local HttpService = GetService(game, "HttpService");
+local ScriptContext = GetService(game, "ScriptContext");
+
+local UIS = game:GetService("UserInputService")
+
+local Request = http_request or request or HttpPost or syn.request
+local Player = Players.LocalPlayer;
+local Character = Player.Character;
+local Mouse = Player:GetMouse()
+local Cam = workspace.CurrentCamera;
+
+local WorldToScreen = Cam.WorldToScreenPoint
+local WorldToViewportPoint = Cam.WorldToViewportPoint
+local GetPartsObscuringTarget = Cam.GetPartsObscuringTarget
+
+local SilentSettings = { Main = { Enabled = false, TeamCheck = false, VisibleCheck = false, TargetPart = "Head" }, FOVSettings = { Visible = false, Radius = 120 } };
+local ValidTargetParts = {"Head", "Torso"};
+
+local RequiredArgs = {
+    ArgCountRequired = 3,
+        Args = {
+        "Instance", "Vector3", "Vector3", "RaycastParams"
+    }
+}
+
+local fov_circle = Drawing.new("Circle")
+fov_circle.Thickness = 1
+fov_circle.NumSides = 100
+fov_circle.Radius = 120
+fov_circle.Filled = false
+fov_circle.Visible = false
+fov_circle.ZIndex = 999
+fov_circle.Transparency = 1
+fov_circle.Color = Color3.fromRGB(255, 255 ,255)
+
+local function GetPositionOnScreen(Vector)
+    local Vec3, OnScreen = WorldToScreen(Cam, Vector)
+    return Vector2.new(Vec3.X, Vec3.Y), OnScreen
+end
+local function ValidateArguments(Args, RayMethod)
+    local Matches = 0
+
+    if #Args < RayMethod.ArgCountRequired then
+        return false
+    end
+
+    for Pos, Argument in next, Args do
+        if typeof(Argument) == RayMethod.Args[Pos] then
+            Matches = Matches + 1
+        end
+    end
+
+    return Matches >= RayMethod.ArgCountRequired
+end
+        
+local function GetDirection(Origin, Position)
+    return (Position - Origin).Unit * 1000
+end
+        
+local function GetMousePosition()
+    return Vector2.new(Mouse.X, Mouse.Y)
+end
+        
+        local function GetClosestPlayer()
+            if not SilentSettings.Main.TargetPart then return end
+
+            local Closest
+            local DistanceToMouse
+
+            for _, v in next, game.GetChildren(Players) do
+                if v == Player then continue end
+                if SilentSettings.Main.TeamCheck and v.Team == Player.Team then continue end
+        
+                local Character = v.Character
+                if not Character then continue end
+        
+                local HumanoidRootPart = game.FindFirstChild(Character, "HumanoidRootPart")
+                local Humanoid = game.FindFirstChild(Character, "Humanoid")
+        
+                if not HumanoidRootPart or not Humanoid or Humanoid and Humanoid.Health <= 0 then continue end
+        
+                local ScreenPosition, OnScreen = GetPositionOnScreen(HumanoidRootPart.Position)
+        
+                if not OnScreen then continue end
+        
+                local Distance = (GetMousePosition() - ScreenPosition).Magnitude
+                if Distance <= (DistanceToMouse or (SilentSettings.Main.Enabled and SilentSettings.FOVSettings.Radius) or 2000) then
+                    Closest = ((SilentSettings.Main.TargetPart == "Random" and Character[ValidTargetParts[math.random(1, #ValidTargetParts)]]) or Character[SilentSettings.Main.TargetPart])
+                    DistanceToMouse = Distance
+                end
+            end
+            return Closest
+        end
+        
+        local oldNamecall
+        oldNamecall = hookmetamethod(game, "__namecall", function(...)
+            local Method = getnamecallmethod()
+            local Arguments = {...}
+            local self = Arguments[1]
+        
+            if SilentSettings.Main.Enabled and self == workspace then
+                if ValidateArguments(Arguments, RequiredArgs) then
+                    local A_Origin = Arguments[2]
+                    local HitPart = GetClosestPlayer()
+
+                    if HitPart then
+                        Arguments[3] = GetDirection(A_Origin, HitPart.Position)
+    
+                        return oldNamecall(unpack(Arguments))
+                    end
+                end
+            end
+
+            return oldNamecall(...)
+    end)
+        
+
+resume(create(function()
+game:GetService("RunService").RenderStepped:Connect(function()
+        if SilentSettings.FOVSettings.Visible then 
+            fov_circle.Position = GetMousePosition() + Vector2.new(0, 36)
+        end
+    end)
+end))
+
+
+local Window = Library:Window({
+   Text = GameName
+})
+
+local Tab = Window:Tab({
+   Text = "COSTED"
+})
+
+local Section = Tab:Section({
+   Text = "Silent Aim"
+})
+
+Section:Check({
+    Text = "Silent-Aim",
+    Callback = function(State)
+        SilentSettings.Main.Enabled = State
+    end
+ })
+
+Section:Check({
+    Text = "Show FOV",
+    Callback = function(State)
+        SilentSettings.FOVSettings.Visible = State
+        fov_circle.Visible = State
+    end
+ })
+
+ Section:Slider({
+    Text = "FOV radius",
+    Minimum = 0,
+    Default = 60,
+    Maximum = 1000,
+    Postfix = "%",
+    Callback = function(Value)
+        SilentSettings.FOVSettings.Radius = Value
+        fov_circle.Radius = Value
+    end
+ })
+ 
+ Section:Dropdown({
+    Text = "Body Part",
+    List = {"Head", "Torso", "Random"},
+    Callback = function(State)
+        SilentSettings.Main.TargetPart = State
+    end
+ })
+
+ local Character = Tab:Section({
+    Text = "Local Player"
+ })
+
+ Character:Slider({
+    Text = "Walk Speed",
+    Minimum = 16,
+    Default = 16,
+    Maximum = 100,
+    Postfix = "%",
+    Callback = function(Value)
+        _G.WalkSpeed = Value
+    end
+ })
+
+
+ Character:Check({
+    Text = "Walkspeed",
+    Callback = function(State)
+        if State == true then
+            getgenv().WalkSpeedValue = _G.WalkSpeed; 
+            local Player = game:service'Players'.LocalPlayer;
+            Player.Character.Humanoid:GetPropertyChangedSignal'WalkSpeed':Connect(function()
+            Player.Character.Humanoid.WalkSpeed = getgenv().WalkSpeedValue;
+            end)
+            Player.Character.Humanoid.WalkSpeed = getgenv().WalkSpeedValue;
+            end 
+            if State == false then
+            getgenv().WalkSpeedValue = 16; 
+            local Player = game:service'Players'.LocalPlayer;
+            Player.Character.Humanoid:GetPropertyChangedSignal'WalkSpeed':Connect(function()
+            Player.Character.Humanoid.WalkSpeed = getgenv().WalkSpeedValue;
+            end)
+            Player.Character.Humanoid.WalkSpeed = getgenv().WalkSpeedValue;
+        end
+    end
+ })
+
+ Character:Slider({
+    Text = "Jump Power",
+    Minimum = 50,
+    Default = 50,
+    Maximum = 500,
+    Postfix = "%",
+    Callback = function(Value)
+        _G.JumpPower = Value
+    end
+ })
+
+
+ Character:Check({
+    Text = "JumpPower",
+    Callback = function(State)
+        if State == true then
+            getgenv().JumpPowerValue = _G.JumpPower; 
+            local Player = game:service'Players'.LocalPlayer;
+            Player.Character.Humanoid:GetPropertyChangedSignal'WalkSpeed':Connect(function()
+            Player.Character.Humanoid.JumpPower = getgenv().JumpPowerValue;
+            end)
+            Player.Character.Humanoid.JumpPower = getgenv().JumpPowerValue;
+            end 
+            if State == false then
+            getgenv().JumpPowerValue = 50; 
+            local Player = game:service'Players'.LocalPlayer;
+            Player.Character.Humanoid:GetPropertyChangedSignal'JumpPower':Connect(function()
+            Player.Character.Humanoid.JumpPower = getgenv().JumpPowerValue;
+            end)
+            Player.Character.Humanoid.JumpPower = getgenv().JumpPowerValue;
+        end
+    end
+ })
+
+ Character:Check({
+    Text = "Noclip",
+    Callback = function(State)
+        _G.Noclip = State
+            
+            local function Noclip()
+            if game.Players.LocalPlayer.Character ~= nil and _G.Noclip == true then
+            for _, selfChar in pairs(game.Players.LocalPlayer.Character:GetDescendants()) do
+                if selfChar:IsA("BasePart") and selfChar.CanCollide == true and selfChar.Name then
+                        selfChar.CanCollide = false
+                    end
+                end
+            end
+            end
+            
+            game:GetService('RunService').Stepped:Connect(Noclip)
+    end
+ })
+
+ local function keydown(key)
+    return game:GetService("UserInputService"):IsKeyDown(key)
+ end
+   local Flying = false
+   Character:Check({
+    Text = "Fly",
+    Callback = function(State)
+        Flying = State
+        if State== false then return end
+        while Flying do
+            local move = game.Players.LocalPlayer.Character.Humanoid.MoveDirection * (_G.Speeed) * 4
+            if keydown(Enum.KeyCode.Space) then
+                game.Players.LocalPlayer.Character.Humanoid.RootPart.Velocity = Vector3.new(0,55,0) + move
+            elseif keydown(Enum.KeyCode.C) then
+                game.Players.LocalPlayer.Character.Humanoid.RootPart.Velocity = Vector3.new(0,-55,0) + move
+            else
+                game.Players.LocalPlayer.Character.Humanoid.RootPart.Velocity = Vector3.new(0,2,0) + move
+            end
+            game:GetService("RunService").Heartbeat:wait()
+        end
+    end
+ })
+
+ Character:Slider({
+    Text = "Fly Speed",
+    Minimum = 10,
+    Default = 10,
+    Maximum = 100,
+    Postfix = "%",
+    Callback = function(Value)
+        _G.Speeed = Value
+    end
+ })
+
+ local Settings = {
+    antiaim = false,
+    antiaimvalue = 0,
+    Antiafk = false
+ }
+
+
+ local Section3 = Tab:Section({
+        Text = "Misc",
+        Side = "Right"
+ })
+
+ Section3:Check({
+    Text = "Anti Aim",
+    Callback = function(State)
+        Settings.antiaim = State
+    end
+ })
+
+ Section3:Slider({
+    Text = "Speed",
+    Minimum = 10,
+    Default = 10,
+    Maximum = 100,
+    Postfix = "%",
+    Callback = function(Value)
+        Settings.antiaimvalue = Value
+    end
+ })
+
+ RunService.RenderStepped:Connect(function()
+    if Settings.antiaim == true then
+        coroutine.resume(coroutine.create(function()
+            LocalPlayer.Character.HumanoidRootPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame
+                * CFrame.Angles(0, math.rad(Settings.antiaimvalue), 0)
+        end))
+    end
+ end)
+
+ Section3:Check({
+    Text = "Anti Afk",
+    Callback = function(State)
+        Settings.Antiafk = State
+    end
+ })
+
+ local vu = game:GetService("VirtualUser")
+ game:GetService("Players").LocalPlayer.Idled:connect(function()
+    if Settings.AntiAfk then
+        vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+        wait(1)
+        vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    end
+ end)
+
+ local Section4 = Tab:Section({
+    Text = "Visuals",
+    Side = "Right"
+ })
+
+ local ESP = loadstring(game:HttpGet("https://raw.githubusercontent.com/leakediz/esp/main/visuals"))()
+
+ Section4:Check({
+    Text = "Names",
+    Callback = function(State)
+        getgenv().PikaESPSettings.Name = State
+    end
+ })
+
+ Section4:Check({
+    Text = "Boxes",
+    Callback = function(State)
+        getgenv().PikaESPSettings.Box = State
+    end
+ })
+
+ Section4:Check({
+    Text = "Tracers",
+    Callback = function(State)
+        getgenv().PikaESPSettings.Tracers = State
+    end
+ })
+
+ local Section5 = Tab:Section({
+    Text = "Status",
+    Side = "Right"
+ })
+
+ Section5:Label({
+    Text = "API : Undetected",
+    Color = Color3.fromRGB(100, 190, 31)
+ })
+
+ Section5:Label({
+    Text = "EXPLOIT : Undetected",
+    Color = Color3.fromRGB(100, 190, 31)
+ })
+
+Tab:Select()
+
+Notification:Notify(
+    {Title = "COSTED", Description = "SCRIPT LOADED IN TIME > UNDETECTED"},
+    {OutlineColor = Color3.fromRGB(80, 80, 80),Time = 5, Type = "image"},
+    {Image = "http://www.roblox.com/asset/?id=6023426923", ImageColor = Color3.fromRGB(255, 84, 84)}
+)
